@@ -5,12 +5,10 @@ import datetime
 def process_request(req: bytes):
     s = req.decode()
     # <req_method> <path> <HTTPversion>\r\nHeader1: value1\r\n..\r\n\r\n
-    recv_data = s.split("\r\n\r\n")
-    other = recv_data[0].split("\r\n")
-    req_details = other[0]
-    req_method, req_path, http_ver = req_details.split(" ")
-    headers = other[1:]
-    body = recv_data[1]
+    req_data = s.split("\r\n")
+    req_method, req_path, req_http_ver = req_data[0].split(" ")
+    req_headers = req_data[1:-1]
+    req_body = req_data[-1]
     
     if req_method=="GET":
         if req_path=="/":
