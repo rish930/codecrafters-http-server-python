@@ -1,50 +1,122 @@
 import socket
-import datetime
+from typing import Dict
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
+@dataclass
+class Request:
+    method: str
+    path: str
+    http_version: str
+    headers: Dict[str, str]
+    body: str
 
-def process_request(req: bytes):
-    s = req.decode()
-    # <req_method> <path> <HTTPversion>\r\nHeader1: value1\r\n..\r\n\r\n
-    req_data = s.split("\r\n")
-    status_line = req_data[0]
-    req_method, req_path, req_http_ver = status_line.split(" ")
-    req_headers = req_data[1:-1]
-    req_body = req_data[-1]
+@dataclass
+class Response:
+    status_code: int
+    status_text: str
+    headers: Dict[str, str]
+    body: str
+
+    def encode(self) -> bytes:
+        status_line = f"HTTP/1.1 {self.status_code} {self.status_text}"
+        headers = [f"{k}: {v}" for k, v in self.headers.items()]
+        response = "\r\n".join([status_line, "\r\n".join(headers), "", self.body])
+        return response.encode()
+
+class RequestHandler(ABC):
+    @abstractmethod
+    def handle(self, request: Request) -> Response:
+        pass
+
+class EchoHandler(RequestHandler):
+    def handle(self, request: Request) -> Response:
+        content = request.path.split("/")[2]
+        return Response(
+            status_code=200,
+            status_text="OK",
+            headers={
+                "Content-Type": "text/plain",
+                "Content-Length": str(len(content))
+            },
+            body=content
+        )
+
+class GetUserAgentHandler(RequestHandler):
+    def handle(self, request: Request) -> Response:
+        content = request.headers["User-Agent"]
+        return Response(
+            status_code=200,
+            status_text="OK",
+            headers={
+                "Content-Type": "text/plain",
+                "Content-Length": str(len(content))
+            },
+            body=content
+        )
+
+class Router:
+    def __init__(self):
+        self.routes: Dict[str, RequestHandler] = {}
     
-    if req_method=="GET":
-        if req_path=="/":
-            return b"HTTP/1.1 200 OK\r\n\r\n"
-        # elif req_path.ma "/echo" TODO use pattern equivalent to "/echo/{string}"
-        elif (req_path[:6]=="/echo/"):
-            string = req_path.split("/")[2]
-            res_headers = ["Content-Type: text/plain", f'Content-Length: {len(string)}']
-            res_body = string
-            res_status_line = "HTTP/1.1 200 OK"
-            res: str = "\r\n".join([res_status_line, "\r\n".join(res_headers)+"\r\n", res_body])
-            print("Response to send:", res)
-            return res.encode()
-            
-        else:
-            return b"HTTP/1.1 404 Not Found\r\n\r\n"
-    else:
-        return b"HTTP/1.1 404 Not Found\r\n\r\n"
+    def add_route(self, method: str, path: str, handler: RequestHandler):
+        self.routes[(method, path)] = handler
+    
+    def route(self, request: Request) -> Response:
+        # Basic path matching (could be improved with regex)
+        if (request.method, request.path) == ("GET", "/"):
+            return Response(200, "OK", {}, "")
+        
+        for method_path, handler in self.routes.items():
+            if (request.method==method_path[0] and request.path.startswith(method_path[1])):
+                return handler.handle(request)
+        
+        return Response(404, "Not Found", {}, "")
 
+class HTTPServer:
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+        self.router = Router()
+    
+    def parse_request(self, data: bytes) -> Request:
+        s = data.decode()
+        lines = s.split("\r\n")
+        request_line = lines[0]
+        method, path, http_version = request_line.split(" ")
+        header_lines = lines[1:-2]
+        headers = {}
+        for line in header_lines:
+            if line:
+                key, value = line.split(": ", 1)
+                headers[key] = value
+        
+        return Request(
+            method=method,
+            path=path,
+            http_version=http_version,
+            headers=headers,
+            body=lines[-1]
+        )
+    
+    def run(self):
+        print(f"Starting TCP server on {self.host}:{self.port}...")
+        server_socket = socket.create_server((self.host, self.port), reuse_port=True)
+        print("TCP server started")
+        
+        while True:
+            client, address = server_socket.accept()
+            with client:
+                data = client.recv(1024)
+                request = self.parse_request(data)
+                response = self.router.route(request)
+                client.send(response.encode())
 
 def main():
-    print("Starting TCP server...")
-    server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
-    print("TCP server started")
-    while True:
-        print("\nWait for client request...")
-        client, address = server_socket.accept()
-        with client:
-            print("Request received")
-            print("Client address:", address)
-            data = client.recv(1024)
-            print("Client data:", data)
-            res = process_request(data)
-            client.send(res)
-
+    server = HTTPServer("localhost", 4221)
+    server.router.add_route("GET", "/echo/", EchoHandler())
+    server.router.add_route("GET", "/user-agent", GetUserAgentHandler())
+    server.run()
 
 if __name__ == "__main__":
     main()
