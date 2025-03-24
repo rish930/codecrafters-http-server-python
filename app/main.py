@@ -108,8 +108,8 @@ class HTTPServer:
             client, address = server_socket.accept()
             with client:
                 data = client.recv(1024)
-                request = self.parse_request(data)
-                response = self.router.route(request)
+                request: Request = self.parse_request(data)
+                response: Response = self.router.route(request)
                 client.send(response.encode())
 
 def main():
