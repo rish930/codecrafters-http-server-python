@@ -2,7 +2,7 @@ import socket
 from typing import Dict
 import threading
 from app.models import Request, Response
-from app.requestHandler import EchoHandler, GetUserAgentHandler, RequestHandler
+from app.requestHandler import RequestHandler, EchoHandler, GetUserAgentHandler, GetFileHandler 
 
 
 class Router:
@@ -67,9 +67,16 @@ class HTTPServer:
             client_thread.start()
             
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="HTTP Server")
+    parser.add_argument('--directory', default='tmp', help='directory for any file to get')
+    args = parser.parse_args()
+
     server = HTTPServer("localhost", 4221)
     server.router.add_route("GET", "/echo/", EchoHandler())
     server.router.add_route("GET", "/user-agent", GetUserAgentHandler())
+    server.router.add_route("GET", "/files/", GetFileHandler(args.directory))
     server.run()
 
 if __name__ == "__main__":
