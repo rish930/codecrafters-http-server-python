@@ -1,59 +1,9 @@
 import socket
 from typing import Dict
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
+import threading
+from app.models import Request, Response
+from app.requestHandler import EchoHandler, GetUserAgentHandler, RequestHandler
 
-@dataclass
-class Request:
-    method: str
-    path: str
-    http_version: str
-    headers: Dict[str, str]
-    body: str
-
-@dataclass
-class Response:
-    status_code: int
-    status_text: str
-    headers: Dict[str, str]
-    body: str
-
-    def encode(self) -> bytes:
-        status_line = f"HTTP/1.1 {self.status_code} {self.status_text}"
-        headers = [f"{k}: {v}" for k, v in self.headers.items()]
-        response = "\r\n".join([status_line, "\r\n".join(headers), "", self.body])
-        return response.encode()
-
-class RequestHandler(ABC):
-    @abstractmethod
-    def handle(self, request: Request) -> Response:
-        pass
-
-class EchoHandler(RequestHandler):
-    def handle(self, request: Request) -> Response:
-        content = request.path.split("/")[2]
-        return Response(
-            status_code=200,
-            status_text="OK",
-            headers={
-                "Content-Type": "text/plain",
-                "Content-Length": str(len(content))
-            },
-            body=content
-        )
-
-class GetUserAgentHandler(RequestHandler):
-    def handle(self, request: Request) -> Response:
-        content = request.headers["User-Agent"]
-        return Response(
-            status_code=200,
-            status_text="OK",
-            headers={
-                "Content-Type": "text/plain",
-                "Content-Length": str(len(content))
-            },
-            body=content
-        )
 
 class Router:
     def __init__(self):
@@ -99,6 +49,13 @@ class HTTPServer:
             body=lines[-1]
         )
     
+    def handle_client(self, client):
+       with client:
+                data = client.recv(1024)
+                request: Request = self.parse_request(data)
+                response: Response = self.router.route(request)
+                client.send(response.encode())
+
     def run(self):
         print(f"Starting TCP server on {self.host}:{self.port}...")
         server_socket = socket.create_server((self.host, self.port), reuse_port=True)
@@ -106,12 +63,9 @@ class HTTPServer:
         
         while True:
             client, address = server_socket.accept()
-            with client:
-                data = client.recv(1024)
-                request: Request = self.parse_request(data)
-                response: Response = self.router.route(request)
-                client.send(response.encode())
-
+            client_thread = threading.Thread(target=self.handle_client, args=(client,))
+            client_thread.start()
+            
 def main():
     server = HTTPServer("localhost", 4221)
     server.router.add_route("GET", "/echo/", EchoHandler())
