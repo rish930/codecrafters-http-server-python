@@ -14,7 +14,7 @@ class Response:
     status_code: int
     status_text: str
     headers: Dict[str, str]
-    body: str
+    body: str = ""
 
     def encode(self) -> bytes:
         status_line = f"HTTP/1.1 {self.status_code} {self.status_text}"

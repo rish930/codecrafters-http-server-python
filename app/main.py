@@ -2,7 +2,7 @@ import socket
 from typing import Dict
 import threading
 from app.models import Request, Response
-from app.requestHandler import RequestHandler, EchoHandler, GetUserAgentHandler, GetFileHandler 
+from app.requestHandler import *
 
 
 class Router:
@@ -77,6 +77,7 @@ def main():
     server.router.add_route("GET", "/echo/", EchoHandler())
     server.router.add_route("GET", "/user-agent", GetUserAgentHandler())
     server.router.add_route("GET", "/files/", GetFileHandler(args.directory))
+    server.router.add_route("POST", "/files/", PostFileHandler(args.directory))
     server.run()
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from abc import ABC,abstractmethod
 import os
+import traceback
 
 from app.models import Request, Response
 
@@ -67,3 +68,35 @@ class GetFileHandler(RequestHandler):
                 headers={},
                 body=""
             )
+
+class PostFileHandler(RequestHandler):
+    def __init__(self, file_dir) -> None:
+        super().__init__()
+        self.file_dir = file_dir
+
+    def handle(self, request: Request) -> Response:
+        # validations
+            # method should be post
+            # path should be "files/{filename}"
+            # headers should have conten-length and content-type
+        
+        # Main operation
+        # get the filename
+        try:
+            filename = request.path.split("/")[-1]
+            # save the body data into file
+            filepath = os.path.join(self.file_dir, filename)
+            content = request.body
+            content_length = int(request.headers.get("Content-Length"))
+            with open(filepath, 'w') as f:
+                f.write(content[:content_length])
+            status = 201
+            status_msg = "Created"
+            
+        except Exception as e:
+            print("Error occurred in posting file", traceback.print_exc())
+            status = 500
+            status_msg = "Internal Error"
+        
+        # send response back
+        return Response(status, status_msg, {})
